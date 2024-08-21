@@ -165,17 +165,17 @@ public class Visual implements ActionListener {
     private String getImagePath(String option) {
         switch (option) {
             case "Maksim Kac":
-                return "kernel-image-processing-main/kernel-image-processing-master/pictures/kac.jpeg";
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/kac.jpeg";
             case "Puppy":
-                return "kernel-image-processing-master/pictures/puppy.jpg";
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/puppy.jpg";
             case "500x375":
-                return "kernel-image-processing-master/pictures/500x375.jpg";
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/500x375.jpg";
             case "640x443":
-                return "kernel-image-processing-master/pictures/640x443.jpg";
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/640x443.jpg";
             case "740x416":
-                return "kernel-image-processing-master/pictures/740x416.jpg";
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/740x416.jpg";
             case "800x450":
-                return "kernel-image-processing-master/pictures/800x450.jpg";
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/800x450.jpg";
             default:
                 return null;
         }
