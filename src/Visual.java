@@ -64,7 +64,7 @@ public class Visual implements ActionListener {
         menuList.setBounds(20, 50, 200, 30);
 
         // Processing types
-        String[] processingOptions = {"Sequentional", "Parallel"};
+        String[] processingOptions = {"Sequentional", "Parallel", "Distributive"};
         processingList = new JComboBox<>(processingOptions);
         processingList.setBounds(20, 150, 200, 30);
 
@@ -130,6 +130,15 @@ public class Visual implements ActionListener {
                     exception.printStackTrace();
                 }
                 processEnd = System.currentTimeMillis();
+            } else if (processingList.getSelectedItem().equals("Distributive")){
+                processStart = System.currentTimeMillis();
+               /* try {
+                    Distributive.convolutionImage(imgPath, order, factor,bias,kernel);
+                    showInputImage(Distributive.output);
+                } catch (IOException exception){
+                    exception.printStackTrace();
+                } */
+
             }
 
             processOv = processEnd - processStart;

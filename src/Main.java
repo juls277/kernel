@@ -26,11 +26,23 @@ public class Main {
         // Get the rank of the current process
         int rank = MPI.COMM_WORLD.Rank();
 
-        // Get the total number of processes
-        int size = MPI.COMM_WORLD.Size();
+        // Define the root process that will broadcast the value (usually rank 0)
+        int root = 0;
 
-        // Print a message from each process
-        System.out.println("Hello from process " + rank + " out of " + size);
+        // Create a buffer to hold the value to be broadcasted
+        int[] value = new int[1];
+
+        if (rank == root) {
+            // If this is the root process, initialize the value
+            value[0] = 42;
+            System.out.println("Root process (rank " + rank + ") broadcasting value: " + value[0]);
+        }
+
+        // Broadcast the value from the root process to all other processes
+        MPI.COMM_WORLD.Bcast(value, 0, 1, MPI.INT, root);
+
+        // Print the received value on each process
+        System.out.println("Process " + rank + " received value: " + value[0]);
 
         // Finalize the MPI environment
         MPI.Finalize();
