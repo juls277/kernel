@@ -40,7 +40,46 @@ public class Distributive {
             }
         }
 
+        int[] recvBuffer = new int[WIDTH * (endingRow - startingRow)];
+        //scatter parts of the image to processes
+        MPI.COMM_WORLD.Scatter(inputRGB, startingRow * WIDTH, recvBuffer.length, MPI.INT, recvBuffer, 0, recvBuffer.length, MPI.INT, 0);
+        //perform computation on chunck
+        for (int y = 0; y < endingRow - startingRow; y++) {
+            for (int x = 0; x < WIDTH; x++) {
+                float red = 0f, green = 0f, blue = 0f;
+                for (int i = 0; i < order; i++) {
+                    for (int j = 0; j < order; j++) {
+                        int imageX = (x - order / 2 + i + WIDTH) % WIDTH;
+                        int imageY = (y - order / 2 + j + HEIGHT) % HEIGHT;
 
+                        int RGB = recvBuffer[imageY * WIDTH + imageX];
+                        int R = (RGB >> 16) & 0xff;
+                        int G = (RGB >> 8) & 0xff;
+                        int B = (RGB) & 0xff;
+
+                        red += (R * kernel[i][j]);
+                        green += (G * kernel[i][j]);
+                        blue += (B * kernel[i][j]);
+                    }
+                }
+                int outR = Math.min(Math.max((int)(red * factor + bias), 0), 255);
+                int outG = Math.min(Math.max((int)(green * factor + bias), 0), 255);
+                int outB = Math.min(Math.max((int)(blue * factor + bias), 0), 255);
+                outputRGB[y * WIDTH + x] = (outR << 16) | (outG << 8) | outB;
+            }
+        }
+
+        //gather chunks back to a single image
+        MPI.COMM_WORLD.Gather(outputRGB, 0, outputRGB.length, MPI.INT, inputRGB, startingRow * WIDTH, outputRGB.length, MPI.INT, 0);
+
+        //master process transforms 1D arr back to 2D and writes output
+        if (rank == 0) {
+            for (int y = 0; y < HEIGHT; y++) {
+                for (int x = 0; x < WIDTH; x++) {
+                    output.setRGB(x, y, inputRGB[y * WIDTH + x]);
+                }
+            }
+        }
 
     }
 
