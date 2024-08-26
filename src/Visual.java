@@ -7,12 +7,13 @@ import java.io.IOException;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.Border;
+import mpi.*;
 
 public class Visual implements ActionListener {
 
     private static final int LABEL_WIDTH = 200;
     private static final int LABEL_HEIGHT = 200;
-    
+
     private BufferedImage blankIm;
     private JComboBox<String> menuList;
     private JComboBox<String> processingList;
@@ -25,6 +26,7 @@ public class Visual implements ActionListener {
     private JFrame frame;
     private ImageIcon outputIcon;
     private String imgPath;
+    private String[] _args;
     private int order;
     private float bias;
     private float factor;
@@ -34,12 +36,12 @@ public class Visual implements ActionListener {
     private long processOv;
     private long preprocessingTime;
 
-    public Visual() {
+    public Visual(String[] args) {
         frame = new JFrame();
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(800, 600);
         frame.setTitle("Kernel Image Processing");
-
+        _args = args;
         // Use null layout manager to manually set component bounds
         frame.setLayout(null);
 
@@ -112,37 +114,40 @@ public class Visual implements ActionListener {
                 return;
             }
 
-            if (processingList.getSelectedItem().equals("Sequentional")) {
-                processStart = System.currentTimeMillis();
+            // Disable the run button to prevent multiple clicks
+            runButton.setEnabled(false);
+
+            // Run the task in a background thread
+            new Thread(() -> {
                 try {
-                    Sequentional.convolutionImage(imgPath, order, factor, bias, kernel);
-                    showOutputImage(Sequentional.output);
-                } catch (IOException exception) {
+                    int rank = MPI.COMM_WORLD.Rank();
+                    int[] signal = new int[1];
+
+                    if (rank == 0) {
+                        processStart = System.currentTimeMillis();
+                        signal[0] = 1; // Signal to start convolutionMPI
+                    }
+
+                    // Broadcast the signal to all processes
+                    MPI.COMM_WORLD.Bcast(signal, 0, 1, MPI.INT, 0);
+
+                    if (signal[0] == 1) {
+                        Distributive.convolutionMPI(imgPath, order, factor, bias, kernel, _args);
+                    }
+
+                    if (rank == 0) {
+                        processEnd = System.currentTimeMillis();
+                        processOv = processEnd - processStart;
+                        SwingUtilities.invokeLater(() -> {
+                            processingImg.setText("Processed in " + processOv + " ms");
+                            runButton.setEnabled(true);  // Re-enable the run button after processing
+                        });
+                        showOutputImage(Distributive.output);
+                    }
+                } catch (MPIException | IOException exception) {
                     exception.printStackTrace();
                 }
-                processEnd = System.currentTimeMillis();
-            } else if (processingList.getSelectedItem().equals("Parallel")) {
-                processStart = System.currentTimeMillis();
-                try {
-                    Parallel.convolutionImage(imgPath, order, factor, bias, kernel);
-                    showOutputImage(Parallel.output);
-                } catch (IOException exception) {
-                    exception.printStackTrace();
-                }
-                processEnd = System.currentTimeMillis();
-            } else if (processingList.getSelectedItem().equals("Distributive")){
-                processStart = System.currentTimeMillis();
-               /* try {
-                    Distributive.convolutionImage(imgPath, order, factor,bias,kernel);
-                    showInputImage(Distributive.output);
-                } catch (IOException exception){
-                    exception.printStackTrace();
-                } */
-
-            }
-
-            processOv = processEnd - processStart;
-            processingImg.setText("Processed in " + processOv + " ms");
+            }).start();
         }
     }
 
