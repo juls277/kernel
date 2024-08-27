@@ -17,6 +17,7 @@ public class Distributive {
         int[] recvBuffer = null;
         int[] outputRGB = null;
 
+
         if (rank == 0) {
             // Root process reads the image and populates inputRGB
             System.out.println("Process " + rank + ": Reading image from file: " + filepath);
@@ -28,7 +29,7 @@ public class Distributive {
             inputRGB = new int[WIDTH * HEIGHT];
             for (int y = 0; y < HEIGHT; y++) {
                 for (int x = 0; x < WIDTH; x++) {
-                    inputRGB[y * WIDTH + x] = input.getRGB(x, y);
+                    inputRGB[y * WIDTH + x] = input.getRGB(x,y);
                 }
             }
             System.out.println("Process " + rank + ": Image flattened into 1D array.");
@@ -51,7 +52,7 @@ public class Distributive {
 
         // Broadcast the populated inputRGB array from root to all processes
         MPI.COMM_WORLD.Bcast(inputRGB, 0, WIDTH * HEIGHT, MPI.INT, 0);
-        System.out.println("Process " + rank + ": Received broadcasted inputRGB array.");
+        System.out.println("Process " + rank + ": Received broadcasted inputRGB array." + inputRGB[70000]);
 
         // Define the send counts and displacements for Scatterv
         int[] sendCounts = new int[size];
@@ -84,10 +85,18 @@ public class Distributive {
         for (int i = 0; i < order; i++) {
             for (int j = 0; j < order; j++) {
                 flattenedKernel[index++] = kernel[i][j];
+               // System.out.println("Process " + rank + " got kernel " + kernel[i][j] + ".");
             }
         }
-        System.out.println("Process " + rank + ": Kernel flattened.");
-
+        //System.out.println("Process " + rank + ": Kernel flattened.");
+        /*MPI.COMM_WORLD.Bcast(flattenedKernel,0, flattenedKernel.length, MPI.FLOAT, 0);
+        MPI.COMM_WORLD.Bcast(order,0,1, MPI.INT, 0);
+        MPI.COMM_WORLD.Bcast(factor,0,1, MPI.FLOAT, 0);
+        MPI.COMM_WORLD.Bcast(bias,0,1, MPI.FLOAT, 0);*/
+        MPI.COMM_WORLD.Bcast(flattenedKernel, 0, flattenedKernel.length, MPI.FLOAT, 0);
+        MPI.COMM_WORLD.Bcast(new int[]{order}, 0, 1, MPI.INT, 0);
+        MPI.COMM_WORLD.Bcast(new float[]{factor}, 0, 1, MPI.FLOAT, 0);
+        MPI.COMM_WORLD.Bcast(new float[]{bias}, 0, 1, MPI.FLOAT, 0);
         // Perform computation on chunk
         System.out.println("Process " + rank + ": Starting convolution." + " starting row, ending row " + startingRow + " " + endingRow);
         for (int y = 0; y < (endingRow - startingRow); y++) {
@@ -121,9 +130,9 @@ public class Distributive {
 
         // Gather the results back to the root process
         int[] fullOutputRGB = new int[WIDTH * HEIGHT];
-       if (rank == 0) {
-            fullOutputRGB = new int[WIDTH * HEIGHT];
-        }
+        /*if (rank == 0) {
+             fullOutputRGB = new int[WIDTH * HEIGHT];
+        } */
 
         MPI.COMM_WORLD.Gatherv(outputRGB, 0, outputRGB.length, MPI.INT, fullOutputRGB, 0, sendCounts, displs, MPI.INT, 0);
 
@@ -132,39 +141,47 @@ public class Distributive {
 
         // Verify that all processes received the fullOutputRGB correctly
         System.out.println("Process " + rank + ": Verifying fullOutputRGB after Bcast:");
-        for (int i = 0; i < Math.min(10, fullOutputRGB.length); i++) {  // Print only first 10 elements for brevity
-            System.out.println("Process " + rank + ": fullOutputRGB[" + i + "] = " + fullOutputRGB[i]);
+        if (rank == 0) {
+            for (int i = 70000; i < Math.min(70020, fullOutputRGB.length); i++) {  // Print only first 10 elements for brevity
+                System.out.println("Process " + rank + ": fullOutputRGB[" + i + "] = " + fullOutputRGB[i]);
+            }
         }
 
-        // Print outputRGB for verification after gathering and broadcasting
-        /*if (rank != 0) {
-            System.out.println("Process " + rank + ": OutputRGB after Gatherv and Bcast:");
-            for (int i = 0; i < outputRGB.length; i++) {
-                System.out.println(outputRGB[i]);
-            }
-        }*/
-
-        // if (rank == 0) {
+        System.out.println("Width is " + WIDTH);
+        System.out.println("Height is " + HEIGHT);
+        MPI.COMM_WORLD.Bcast(fullOutputRGB, 0, WIDTH * HEIGHT, MPI.INT, 0);
+        //output = new BufferedImage;
+        if (rank == 0) {
             output = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
             for (int y = 0; y < HEIGHT; y++) {
                 for (int x = 0; x < WIDTH; x++) {
-                    output.setRGB(x, y, fullOutputRGB[y * WIDTH + x]);
+                    // output.setRGB(x, y, fullOutputRGB[y * WIDTH + x]);
+                    //  System.out.println("RGB pixel at " + x + " " + y + " " + output.getRGB(x, y));
+                        // int rgb = input.getRGB();
+                        output.setRGB(x, y, fullOutputRGB[y * WIDTH + x]);
+
+
+
                 }
             }
-            System.out.println("After 2D conversion:");
-            for (int y = 0; y < HEIGHT; y++) {  // Check only first 2 rows
-                for (int x = 0; x < WIDTH; x++) {  // Check only first 5 columns
+
+        }
+        /*System.out.println("After 2D conversion:");
+        for (int y = 0; y < HEIGHT; y++) {  // Check only first 2 rows
+            for (int x = 0; x < WIDTH; x++) {  // Check only first 5 columns
                 int rgb = output.getRGB(x, y);
                 System.out.println("output.getRGB(" + x + "," + y + ") = " + rgb);
-                }
             }
-            // Save the output image
+        }*/
+        // Save the output image
+        if (rank == 0) {
             String outputFilepath = "output.png";
             ImageIO.write(output, "png", new File(outputFilepath));
             System.out.println("Process " + rank + ": Output image saved as " + outputFilepath);
+        }
 
-            // Print fullOutputRGB for verification after gathering
-            //System.out.println("Process " + rank + ": Full output RGB after Gatherv:");
+        // Print fullOutputRGB for verification after gathering
+        //System.out.println("Process " + rank + ": Full output RGB after Gatherv:");
            /* for (int i = 0; i < fullOutputRGB.length; i++) {
                 System.out.println(fullOutputRGB[i]);
             }*/
