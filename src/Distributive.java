@@ -72,6 +72,26 @@ public class Distributive {
 
         recvBuffer = new int[sendCounts[rank]];
         outputRGB = new int[recvBuffer.length];
+        int[] ord = new int [1];
+        MPI.COMM_WORLD.Bcast(ord=new int[]{order}, 0, 1, MPI.INT, 0);
+        float[] flattenedKernel = new float[ord[0] * ord[0]];
+        float[] fact = new float[1];
+        float[] bi = new float [1];
+
+        // Flatten the kernel into a 1D array
+        if (rank == 0) {
+            /*float[] */flattenedKernel = new float[order * order];
+            int index = 0;
+            for (int i = 0; i < order; i++) {
+                for (int j = 0; j < order; j++) {
+                    flattenedKernel[index++] = kernel[i][j];
+                }
+            }
+        }
+
+        MPI.COMM_WORLD.Bcast(flattenedKernel, 0, flattenedKernel.length, MPI.FLOAT, 0);
+        MPI.COMM_WORLD.Bcast(fact=new float[]{factor}, 0, 1, MPI.FLOAT, 0);
+        MPI.COMM_WORLD.Bcast(bi=new float[]{bias}, 0, 1, MPI.FLOAT, 0);
 
 
 
@@ -79,48 +99,32 @@ public class Distributive {
         MPI.COMM_WORLD.Scatterv(inputRGB, 0, sendCounts, displs, MPI.INT, recvBuffer, 0, recvBuffer.length, MPI.INT, 0);
         System.out.println("Process " + rank + ": Received image data chunk.");
 
-        // Flatten the kernel into a 1D array
-        float[] flattenedKernel = new float[order * order];
-        int index = 0;
-        for (int i = 0; i < order; i++) {
-            for (int j = 0; j < order; j++) {
-                flattenedKernel[index++] = kernel[i][j];
-               // System.out.println("Process " + rank + " got kernel " + kernel[i][j] + ".");
-            }
-        }
-        //System.out.println("Process " + rank + ": Kernel flattened.");
-        /*MPI.COMM_WORLD.Bcast(flattenedKernel,0, flattenedKernel.length, MPI.FLOAT, 0);
-        MPI.COMM_WORLD.Bcast(order,0,1, MPI.INT, 0);
-        MPI.COMM_WORLD.Bcast(factor,0,1, MPI.FLOAT, 0);
-        MPI.COMM_WORLD.Bcast(bias,0,1, MPI.FLOAT, 0);*/
-        MPI.COMM_WORLD.Bcast(flattenedKernel, 0, flattenedKernel.length, MPI.FLOAT, 0);
-        MPI.COMM_WORLD.Bcast(new int[]{order}, 0, 1, MPI.INT, 0);
-        MPI.COMM_WORLD.Bcast(new float[]{factor}, 0, 1, MPI.FLOAT, 0);
-        MPI.COMM_WORLD.Bcast(new float[]{bias}, 0, 1, MPI.FLOAT, 0);
+
+
         // Perform computation on chunk
         System.out.println("Process " + rank + ": Starting convolution." + " starting row, ending row " + startingRow + " " + endingRow);
-        for (int y = 0; y < (endingRow - startingRow); y++) {
+        for (int y = 0; y < (endingRow - startingRow ); y++) {
             for (int x = 0; x < WIDTH; x++) {
 
                 float red = 0f, green = 0f, blue = 0f;
-                for (int i = 0; i < order; i++) {
-                    for (int j = 0; j < order; j++) {
-                        int imageX = (x - order / 2 + j + WIDTH) % WIDTH;
-                        int imageY = (y - order / 2 + i + (endingRow - startingRow)) % (endingRow - startingRow);
+                for (int i = 0; i < ord[0]; i++) {
+                    for (int j = 0; j < ord[0]; j++) {
+                        int imageX = (x - ord[0] / 2 + j + WIDTH) % WIDTH;
+                        int imageY = (y - ord[0] / 2 + i + (endingRow - startingRow)) % (endingRow - startingRow);
 
                         int RGB = recvBuffer[imageY * WIDTH + imageX];
                         int R = (RGB >> 16) & 0xff;
                         int G = (RGB >> 8) & 0xff;
                         int B = (RGB) & 0xff;
 
-                        red += (R * flattenedKernel[i * order + j]);
-                        green += (G * flattenedKernel[i * order + j]);
-                        blue += (B * flattenedKernel[i * order + j]);
+                        red += (R * flattenedKernel[i * ord[0] + j]);
+                        green += (G * flattenedKernel[i * ord[0] + j]);
+                        blue += (B * flattenedKernel[i * ord[0] + j]);
                     }
                 }
-                int outR = Math.min(Math.max((int) (red * factor + bias), 0), 255);
-                int outG = Math.min(Math.max((int) (green * factor + bias), 0), 255);
-                int outB = Math.min(Math.max((int) (blue * factor + bias), 0), 255);
+                int outR = Math.min(Math.max((int) (red * fact[0] + bi[0]), 0), 255);
+                int outG = Math.min(Math.max((int) (green * fact[0] + bi[0]), 0), 255);
+                int outB = Math.min(Math.max((int) (blue * fact[0] + bi[0]), 0), 255);
                 outputRGB[y * WIDTH + x] = (outR << 16) | (outG << 8) | outB;
             }
         }
@@ -191,5 +195,7 @@ public class Distributive {
         //MPI.COMM_WORLD.Barrier();
         System.out.println("Process " + rank + ": Finalizing MPI.");
         //MPI.Finalize();
+
+        System.gc();
     }
 }

@@ -61,7 +61,7 @@ public class Visual implements ActionListener {
         label1.setBorder(border);
 
         // Menu with filters
-        String[] filterOptions = {"Sharpened Image", "Blurred Image", "Edge Detect", "Motion Blur", "Emboss", "Box blur", "Identity"};
+        String[] filterOptions = {"Sharpened Image", "Blurred Image", "Edge Detect",  "Emboss", "Gaussian Blur 5x5","Unsharp Masking 5x5","Motion Blur", "Identity"};
         menuList = new JComboBox<>(filterOptions);
         menuList.setBounds(20, 50, 200, 30);
 
@@ -203,52 +203,74 @@ public class Visual implements ActionListener {
                 bias = 0;
                 kernel = new float[][]{{0, -1, 0}, {-1, 5, -1}, {0, -1, 0}};
                 break;
+
             case "Blurred Image":
                 order = 3;
-                factor = 0.0625f;
+                factor = 0.2f;  // Corrected factor
                 bias = 0;
                 kernel = new float[][]{{1, 2, 1}, {2, 4, 2}, {1, 2, 1}};
                 break;
+
             case "Edge Detect":
                 order = 3;
                 factor = 1f;
                 bias = 0;
                 kernel = new float[][]{{-1, -1, -1}, {-1, 8, -1}, {-1, -1, -1}};
                 break;
+
             case "Emboss":
                 order = 3;
                 factor = 1f;
-                bias = 128;
+                bias = 0;  // Corrected bias
                 kernel = new float[][]{{-1, -1, 0}, {-1, 0, 1}, {0, 1, 1}};
                 break;
-            case "Box blur":
-                order = 3;
-                factor = 0.1f;
-                bias = 0;
-                kernel = new float[][]{{1, 1, 1}, {1, 1, 1}, {1, 1, 1}};
-                break;
-            case "Motion Blur":
-                order = 9;
-                factor = 0.1111f;
+
+            case "Gaussian Blur 5x5":
+                order = 5;
+                factor = 1f / 256f;
                 bias = 0;
                 kernel = new float[][]{
-                        {1, 0, 0, 0, 0, 0, 0, 0, 0},
-                        {0, 1, 0, 0, 0, 0, 0, 0, 0},
-                        {0, 0, 1, 0, 0, 0, 0, 0, 0},
-                        {0, 0, 0, 1, 0, 0, 0, 0, 0},
-                        {0, 0, 0, 0, 1, 0, 0, 0, 0},
-                        {0, 0, 0, 0, 0, 1, 0, 0, 0},
-                        {0, 0, 0, 0, 0, 0, 1, 0, 0},
-                        {0, 0, 0, 0, 0, 0, 0, 1, 0},
-                        {0, 0, 0, 0, 0, 0, 0, 0, 1}
+                        {1, 4, 6, 4, 1},
+                        {4, 16, 24, 16, 4},
+                        {6, 24, 36, 24, 6},
+                        {4, 16, 24, 16, 4},
+                        {1, 4, 6, 4, 1}
                 };
                 break;
+            case "Motion Blur":
+                order = 5;
+                factor = 0.2f;
+                bias = 0;
+                kernel = new float[][]{
+                        {1, 0, 0, 0, 0},
+                        {0, 1, 0, 0, 0},
+                        {0, 0, 1, 0, 0},
+                        {0, 0, 0, 1, 0},
+                        {0, 0, 0, 0, 1}
+                };
+                break;
+            case "Unsharp Masking 5x5":
+                order = 5;
+                factor = -(1f / 256f);
+                bias = 0;
+                kernel = new float[][]{
+                        {1, 4, 6, 4, 1},
+                        {4, 16, 24, 16, 4},
+                        {6, 24, -476, 24, 6},
+                        {4, 16, 24, 16, 4},
+                        {1, 4, 6, 4, 1}
+                };
+                break;
+
+
+
             case "Identity":
                 order = 3;
-                factor = 1f;
+                factor = 1.0f;
                 bias = 0;
                 kernel = new float[][]{{0, 0, 0}, {0, 1, 0}, {0, 0, 0}};
                 break;
+
         }
     }
 

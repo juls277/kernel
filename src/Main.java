@@ -29,7 +29,7 @@ public class Main {
                 if (signal[0] == 1) { // 1 indicates that convolutionMPI should be called
                     System.out.println("Process " + MPI.COMM_WORLD.Rank() + ": Entering convolutionMPI.");
                     //BufferedImage input = ImageIO.read(new File("kac.jpeg"));
-                    Distributive.convolutionMPI("image_path_placeholder", 3, 1.0f, 0.0f, new float[3][3], args);
+                    Distributive.convolutionMPI("image_path_placeholder",3, 0.2f, 0.0f, new float[3][3], args);
                 }
                 // Sleep or wait until the next signal
             }
@@ -37,4 +37,6 @@ public class Main {
             e.printStackTrace();
         }
     }
+
+
 }
