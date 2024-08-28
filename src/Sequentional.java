@@ -26,7 +26,7 @@ public class Sequentional {
         output = new BufferedImage(WIDTH, HEIGHT, input.getType());
         // float[][] kernel; = new float[order][order];
         float sum_of_elements = 0.0f;
-        float mult_factor = 1;
+        float mult_factor = factor;
 
         for(int i=0; i < order; i++)
         {
