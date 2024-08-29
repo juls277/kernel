@@ -22,7 +22,7 @@ public class Parallel {
 
 
             output = new BufferedImage(WIDTH, HEIGHT, input.getType());
-            int mult_factor = 1;
+            float mult_factor = factor;
 
             // Number of threads
             int numThreads = Runtime.getRuntime().availableProcessors();
@@ -69,7 +69,7 @@ class ImageProcessingTask implements Runnable {
     public BufferedImage output;
     public int WIDTH;
 
-    public ImageProcessingTask(int start, int end,int WIDTH, int HEIGHT, int order, float mult_factor, float[][] kernel, BufferedImage input, BufferedImage output) {
+    public ImageProcessingTask(int start, int end,int WIDTH, int HEIGHT, int order, float mult_factor, float[][] kernel,  BufferedImage input, BufferedImage output) {
         this.start = start;
         this.end = end;
         this.HEIGHT = HEIGHT;
