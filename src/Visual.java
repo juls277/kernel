@@ -42,7 +42,6 @@ public class Visual implements ActionListener {
         frame.setSize(800, 600);
         frame.setTitle("Kernel Image Processing");
         _args = args;
-        // Use null layout manager to manually set component bounds
         frame.setLayout(null);
 
         preprocessingTimeLabel = new JLabel("Preprocessing time: ");
@@ -60,41 +59,42 @@ public class Visual implements ActionListener {
         label1.setBounds(450, 250, LABEL_WIDTH, LABEL_HEIGHT);
         label1.setBorder(border);
 
-        // Menu with filters
-        String[] filterOptions = {"Sharpened Image", "Blurred Image", "Edge Detect",  "Emboss", "Gaussian Blur 5x5","Unsharp Masking 5x5","Motion Blur", "Identity"};
+        String[] filterOptions = {"Sharpened Image", "Blurred Image", "Edge Detect", "Emboss", "Gaussian Blur 5x5", "Unsharp Masking 5x5", "Motion Blur", "Identity"};
         menuList = new JComboBox<>(filterOptions);
         menuList.setBounds(20, 50, 200, 30);
 
-        // Processing types
         String[] processingOptions = {"Sequentional", "Parallel", "Distributive"};
         processingList = new JComboBox<>(processingOptions);
         processingList.setBounds(20, 150, 200, 30);
 
-        // Image options
-        String[] imageOptions = {"Choose Image...", "Maksim Kac", "Puppy", "500x375", "640x443", "740x416", "800x450"};
+        String[] imageOptions = {"Choose Image...", "450x300", "600x400", "1350x900", "1500x1000", "1920x1280", "2250x1500", "3000x2000", "4500x3000", "6000x4000", "7500x5000", "8250x5500","12000x8000"};
         JComboBox<String> imageList = new JComboBox<>(imageOptions);
         imageList.setBounds(20, 100, 200, 30);
 
-        // Add listeners
         imageList.addActionListener(e -> {
             String selectedImage = (String) imageList.getSelectedItem();
             if ("Choose Image...".equals(selectedImage)) {
                 chooseImageFile();
             } else {
                 imgPath = getImagePath(selectedImage);
+                clearPreviousOutputs(); // Clear previous outputs and processing times
                 measurePreprocessingTime();
             }
         });
 
         menuList.addActionListener(e -> {
             updateKernelParameters((String) menuList.getSelectedItem());
+            clearOutputAndProcessingTime(); // Clear previous output and processing time when a new filter is selected
+        });
+
+        processingList.addActionListener(e -> {
+            clearOutputAndProcessingTime(); // Clear previous output and processing time when a new processing mode is selected
         });
 
         runButton = new JButton("Run");
         runButton.setBounds(50, 200, 100, 50);
         runButton.addActionListener(this);
 
-        // Adding components
         frame.add(runButton);
         frame.add(menuList);
         frame.add(imageList);
@@ -114,41 +114,74 @@ public class Visual implements ActionListener {
                 return;
             }
 
-            // Disable the run button to prevent multiple clicks
             runButton.setEnabled(false);
 
-            // Run the task in a background thread
+            String processingType = (String) processingList.getSelectedItem();
+
             new Thread(() -> {
                 try {
-                    int rank = MPI.COMM_WORLD.Rank();
-                    int[] signal = new int[1];
+                    switch (processingType) {
+                        case "Sequentional":
+                            processStart = System.currentTimeMillis();
+                            runSequential();
+                            processEnd = System.currentTimeMillis();
+                            break;
 
-                    if (rank == 0) {
-                        processStart = System.currentTimeMillis();
-                        signal[0] = 1; // Signal to start convolutionMPI
+                        case "Parallel":
+                            processStart = System.currentTimeMillis();
+                            runParallel();
+                            processEnd = System.currentTimeMillis();
+                            break;
+
+                        case "Distributive":
+                            int rank = MPI.COMM_WORLD.Rank();
+                            int[] signal = new int[1];
+
+                            if (rank == 0) {
+                                processStart = System.currentTimeMillis();
+                                signal[0] = 1;
+                            }
+
+                            MPI.COMM_WORLD.Bcast(signal, 0, 1, MPI.INT, 0);
+
+                            if (signal[0] == 1) {
+                                Distributive.convolutionMPI(imgPath, order, factor, bias, kernel, _args);
+                            }
+
+                            if (rank == 0) {
+                                processEnd = System.currentTimeMillis();
+                                SwingUtilities.invokeLater(() -> {
+                                    processingImg.setText("Processed in " + processOv + " ms");
+                                    runButton.setEnabled(true);
+                                });
+                                showOutputImage(Distributive.output);
+                            }
+                            break;
                     }
 
-                    // Broadcast the signal to all processes
-                    MPI.COMM_WORLD.Bcast(signal, 0, 1, MPI.INT, 0);
+                    processOv = processEnd - processStart;
+                    SwingUtilities.invokeLater(() -> {
+                        processingImg.setText("Processed in " + processOv + " ms");
+                        runButton.setEnabled(true);
+                    });
 
-                    if (signal[0] == 1) {
-                        Distributive.convolutionMPI(imgPath, order, factor, bias, kernel, _args);
-                    }
-
-                    if (rank == 0) {
-                        processEnd = System.currentTimeMillis();
-                        processOv = processEnd - processStart;
-                        SwingUtilities.invokeLater(() -> {
-                            processingImg.setText("Processed in " + processOv + " ms");
-                            runButton.setEnabled(true);  // Re-enable the run button after processing
-                        });
-                        showOutputImage(Distributive.output);
-                    }
                 } catch (MPIException | IOException exception) {
                     exception.printStackTrace();
                 }
             }).start();
         }
+    }
+
+    private void runSequential() throws IOException {
+        Sequentional.convolutionImage(imgPath, order, factor, bias, kernel);
+        BufferedImage outputImage = Sequentional.output;
+        showOutputImage(outputImage);
+    }
+
+    private void runParallel() throws IOException {
+        Parallel.convolutionImage(imgPath, order, factor, bias, kernel);
+        BufferedImage outputImage = Parallel.output;
+        showOutputImage(outputImage);
     }
 
     private void measurePreprocessingTime() {
@@ -171,25 +204,55 @@ public class Visual implements ActionListener {
     }
 
     private void showOutputImage(BufferedImage outputImage) {
+        if (outputImage == null) {
+            label1.setIcon(null); // Clear the output label
+            return;
+        }
         Image scaledOutputImage = outputImage.getScaledInstance(LABEL_WIDTH, LABEL_HEIGHT, Image.SCALE_DEFAULT);
         outputIcon = new ImageIcon(scaledOutputImage);
         label1.setIcon(outputIcon);
     }
 
+    private void clearPreviousOutputs() {
+        clearOutputAndProcessingTime(); // Clear the output label and processing time
+        preprocessingTimeLabel.setText("Preprocessing time: "); // Reset preprocessing time label only when a new image is selected
+    }
+
+    private void clearOutputAndProcessingTime() {
+        clearOutputImage(); // Clear the output label
+        processingImg.setText("Convolution time: "); // Reset processing time label
+    }
+
+    private void clearOutputImage() {
+        label1.setIcon(null); // Clear the output label
+    }
+
     private String getImagePath(String option) {
         switch (option) {
-            case "Maksim Kac":
-                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/kac.jpeg";
-            case "Puppy":
-                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/puppy.jpg";
-            case "500x375":
-                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/500x375.jpg";
-            case "640x443":
-                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/640x443.jpg";
-            case "740x416":
-                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/740x416.jpg";
-            case "800x450":
-                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/800x450.jpg";
+            case "450x300":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/450x300.jpg";
+            case "600x400":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/600x400.jpg";
+            case "1350x900":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/1350x900.jpg";
+            case "1500x1000":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/1500x1000.jpg";
+            case "1920x1280":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/1920x1280.jpg";
+            case "2250x1500":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/2250x1500.jpg";
+            case "3000x2000":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/3000x2000.jpg";
+            case "4500x3000":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/4500x3000.jpg";
+            case "6000x4000":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/6000x4000.jpg";
+            case "7500x5000":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/7500x5000.jpg";
+            case "8250x5500":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/8250x5500.jpg";
+            case "12000x8000":
+                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/12000x8000.jpg";
             default:
                 return null;
         }
@@ -199,21 +262,21 @@ public class Visual implements ActionListener {
         switch (filter) {
             case "Sharpened Image":
                 order = 3;
-                factor = 1f;
+                factor = 1.9f;
                 bias = 0;
                 kernel = new float[][]{{0, -1, 0}, {-1, 5, -1}, {0, -1, 0}};
                 break;
 
             case "Blurred Image":
                 order = 3;
-                factor = 0.2f;  // Corrected factor
+                factor = 0.0625f;
                 bias = 0;
                 kernel = new float[][]{{1, 2, 1}, {2, 4, 2}, {1, 2, 1}};
                 break;
 
             case "Edge Detect":
                 order = 3;
-                factor = 1f;
+                factor = 0.4f;
                 bias = 0;
                 kernel = new float[][]{{-1, -1, -1}, {-1, 8, -1}, {-1, -1, -1}};
                 break;
@@ -221,7 +284,7 @@ public class Visual implements ActionListener {
             case "Emboss":
                 order = 3;
                 factor = 1f;
-                bias = 0;  // Corrected bias
+                bias = 0;
                 kernel = new float[][]{{-1, -1, 0}, {-1, 0, 1}, {0, 1, 1}};
                 break;
 
@@ -237,6 +300,7 @@ public class Visual implements ActionListener {
                         {1, 4, 6, 4, 1}
                 };
                 break;
+
             case "Motion Blur":
                 order = 5;
                 factor = 0.2f;
@@ -249,9 +313,10 @@ public class Visual implements ActionListener {
                         {0, 0, 0, 0, 1}
                 };
                 break;
+
             case "Unsharp Masking 5x5":
                 order = 5;
-                factor = -(1f / 256f);
+                factor = -(1f / 512f);
                 bias = 0;
                 kernel = new float[][]{
                         {1, 4, 6, 4, 1},
@@ -262,15 +327,12 @@ public class Visual implements ActionListener {
                 };
                 break;
 
-
-
             case "Identity":
                 order = 3;
                 factor = 1.0f;
                 bias = 0;
                 kernel = new float[][]{{0, 0, 0}, {0, 1, 0}, {0, 0, 0}};
                 break;
-
         }
     }
 
@@ -280,8 +342,8 @@ public class Visual implements ActionListener {
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
             imgPath = selectedFile.getAbsolutePath();
+            clearPreviousOutputs(); // Clear previous outputs and processing times
             measurePreprocessingTime();
         }
     }
-
 }

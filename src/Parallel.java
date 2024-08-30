@@ -37,7 +37,7 @@ public class Parallel {
                 int end = (i == numThreads - 1) ? WIDTH : (i + 1) * chunkSize;
 
                 // Create a new thread for each column
-                threads[i] = new Thread(new ImageProcessingTask(start, end, WIDTH, HEIGHT, order, mult_factor, kernel, input, output));
+                threads[i] = new Thread(new ImageProcessingTask(start, end, WIDTH, HEIGHT, order, mult_factor, kernel, bias, input, output));
 
                 // Start the thread
                 threads[i].start();
@@ -65,17 +65,19 @@ class ImageProcessingTask implements Runnable {
     public int order;
     public float mult_factor;
     public float[][] kernel;
+    public float bias;
     public BufferedImage input;
     public BufferedImage output;
     public int WIDTH;
 
-    public ImageProcessingTask(int start, int end,int WIDTH, int HEIGHT, int order, float mult_factor, float[][] kernel,  BufferedImage input, BufferedImage output) {
+    public ImageProcessingTask(int start, int end,int WIDTH, int HEIGHT, int order, float mult_factor, float[][] kernel, float bias, BufferedImage input, BufferedImage output) {
         this.start = start;
         this.end = end;
         this.HEIGHT = HEIGHT;
         this.order = order;
         this.mult_factor = mult_factor;
         this.kernel = kernel;
+        this.bias = bias;
         this.input = input;
         this.output = output;
         this.WIDTH=WIDTH;
@@ -102,9 +104,9 @@ class ImageProcessingTask implements Runnable {
                     }
                 }
                 int outR, outG, outB;
-                outR = Math.min(Math.max((int) (red * mult_factor), 0), 255);
-                outG = Math.min(Math.max((int) (green * mult_factor), 0), 255);
-                outB = Math.min(Math.max((int) (blue * mult_factor), 0), 255);
+                outR = Math.min(Math.max((int) (red * mult_factor + bias), 0), 255);
+                outG = Math.min(Math.max((int) (green * mult_factor + bias), 0), 255);
+                outB = Math.min(Math.max((int) (blue * mult_factor + bias), 0), 255);
                 output.setRGB(x, y, new Color(outR, outG, outB).getRGB());
             }
         }

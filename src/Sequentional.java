@@ -65,9 +65,9 @@ public class Sequentional {
                 }
                 int outR, outG, outB;
 
-                outR = Math.min(Math.max((int)(red*mult_factor),0),255);
-                outG = Math.min(Math.max((int)(green*mult_factor),0),255);
-                outB = Math.min(Math.max((int)(blue*mult_factor),0),255);
+                outR = Math.min(Math.max((int)(red*mult_factor+bias),0),255);
+                outG = Math.min(Math.max((int)(green*mult_factor+bias),0),255);
+                outB = Math.min(Math.max((int)(blue*mult_factor+bias),0),255);
                 // Pixel is written to output image
                 output.setRGB(x,y,new Color(outR,outG,outB).getRGB());
             }

@@ -13,9 +13,8 @@ public class Distributive {
         int rank = MPI.COMM_WORLD.Rank();
         int size = MPI.COMM_WORLD.Size();
 
-        byte[] inputRGB = null;
-        byte[] recvBuffer = null;
-        byte[] outputRGB = null;
+        // Define a small chunk size to optimize memory usage
+        int chunkHeight = 50; // Process 50 rows at a time
 
         if (rank == 0) {
             // Root process reads the image and populates inputRGB
@@ -25,17 +24,8 @@ public class Distributive {
             HEIGHT = input.getHeight();
             System.out.println("Process " + rank + ": Image dimensions: " + WIDTH + "x" + HEIGHT);
 
-            inputRGB = new byte[WIDTH * HEIGHT * 3]; // 3 bytes per pixel (R, G, B)
-            for (int y = 0; y < HEIGHT; y++) {
-                for (int x = 0; x < WIDTH; x++) {
-                    int rgb = input.getRGB(x, y);
-                    int index = (y * WIDTH + x) * 3;
-                    inputRGB[index] = (byte) ((rgb >> 16) & 0xFF); // Red
-                    inputRGB[index + 1] = (byte) ((rgb >> 8) & 0xFF); // Green
-                    inputRGB[index + 2] = (byte) (rgb & 0xFF); // Blue
-                }
-            }
-            System.out.println("Process " + rank + ": Image flattened into 1D byte array.");
+            // Initialize the output image
+            output = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
         }
 
         // Broadcast image dimensions to all processes
@@ -48,33 +38,7 @@ public class Distributive {
         WIDTH = dimensions[0];
         HEIGHT = dimensions[1];
 
-        // Allocate memory for inputRGB on all processes
-        if (rank != 0) {
-            inputRGB = new byte[WIDTH * HEIGHT * 3];
-        }
-
-        // Broadcast the populated inputRGB array from root to all processes
-        MPI.COMM_WORLD.Bcast(inputRGB, 0, WIDTH * HEIGHT * 3, MPI.BYTE, 0);
-        System.out.println("Process " + rank + ": Received broadcasted inputRGB array.");
-
-        // Define the send counts and displacements for Scatterv
-        int[] sendCounts = new int[size];
-        int[] displs = new int[size];
-
-        int rowsPerProcess = HEIGHT / size;
-        int extraRows = HEIGHT % size;
-        int startingRow = rank * rowsPerProcess + Math.min(rank, extraRows);
-        int endingRow = startingRow + rowsPerProcess + (rank < extraRows ? 1 : 0);
-
-        for (int i = 0; i < size; i++) {
-            int startRow = i * rowsPerProcess + Math.min(i, extraRows);
-            int endRow = startRow + rowsPerProcess + (i < extraRows ? 1 : 0);
-            sendCounts[i] = WIDTH * (endRow - startRow) * 3;
-            displs[i] = WIDTH * startRow * 3;
-        }
-
-        recvBuffer = new byte[sendCounts[rank]];
-        outputRGB = new byte[recvBuffer.length];
+        // Scatter and process the image in chunks
         int[] ord = new int[1];
         MPI.COMM_WORLD.Bcast(ord = new int[]{order}, 0, 1, MPI.INT, 0);
         float[] flattenedKernel = new float[ord[0] * ord[0]];
@@ -83,7 +47,6 @@ public class Distributive {
 
         // Flatten the kernel into a 1D array
         if (rank == 0) {
-            flattenedKernel = new float[order * order];
             int index = 0;
             for (int i = 0; i < order; i++) {
                 for (int j = 0; j < order; j++) {
@@ -96,62 +59,79 @@ public class Distributive {
         MPI.COMM_WORLD.Bcast(fact = new float[]{factor}, 0, 1, MPI.FLOAT, 0);
         MPI.COMM_WORLD.Bcast(bi = new float[]{bias}, 0, 1, MPI.FLOAT, 0);
 
-        // Scatter the image data to each process
-        MPI.COMM_WORLD.Scatterv(inputRGB, 0, sendCounts, displs, MPI.BYTE, recvBuffer, 0, recvBuffer.length, MPI.BYTE, 0);
-        System.out.println("Process " + rank + ": Received image data chunk.");
+        for (int startRow = 0; startRow < HEIGHT; startRow += chunkHeight) {
+            int currentChunkHeight = Math.min(chunkHeight, HEIGHT - startRow);
 
-        // Perform computation on chunk
-        System.out.println("Process " + rank + ": Starting convolution." + " starting row, ending row " + startingRow + " " + endingRow);
-        for (int y = 0; y < (endingRow - startingRow); y++) {
-            for (int x = 0; x < WIDTH; x++) {
+            // Allocate memory only for the current chunk
+            byte[] inputChunk = new byte[WIDTH * currentChunkHeight * 3];
+            byte[] outputChunk = new byte[WIDTH * currentChunkHeight * 3];
+            byte[] gatheredChunk = null;
 
-                float red = 0f, green = 0f, blue = 0f;
-                for (int i = 0; i < ord[0]; i++) {
-                    for (int j = 0; j < ord[0]; j++) {
-                        int imageX = (x - ord[0] / 2 + j + WIDTH) % WIDTH;
-                        int imageY = (y - ord[0] / 2 + i + (endingRow - startingRow)) % (endingRow - startingRow);
-
-                        int pixelIndex = (imageY * WIDTH + imageX) * 3;
-                        int R = recvBuffer[pixelIndex] & 0xFF;
-                        int G = recvBuffer[pixelIndex + 1] & 0xFF;
-                        int B = recvBuffer[pixelIndex + 2] & 0xFF;
-
-                        red += (R * flattenedKernel[i * ord[0] + j]);
-                        green += (G * flattenedKernel[i * ord[0] + j]);
-                        blue += (B * flattenedKernel[i * ord[0] + j]);
+            // Root process reads the chunk and sends it to other processes
+            if (rank == 0) {
+                for (int y = 0; y < currentChunkHeight; y++) {
+                    for (int x = 0; x < WIDTH; x++) {
+                        int rgb = input.getRGB(x, startRow + y);
+                        int index = (y * WIDTH + x) * 3;
+                        inputChunk[index] = (byte) ((rgb >> 16) & 0xFF); // Red
+                        inputChunk[index + 1] = (byte) ((rgb >> 8) & 0xFF); // Green
+                        inputChunk[index + 2] = (byte) (rgb & 0xFF); // Blue
                     }
                 }
-                int outR = Math.min(Math.max((int) (red * fact[0] + bi[0]), 0), 255);
-                int outG = Math.min(Math.max((int) (green * fact[0] + bi[0]), 0), 255);
-                int outB = Math.min(Math.max((int) (blue * fact[0] + bi[0]), 0), 255);
-                int outputIndex = (y * WIDTH + x) * 3;
-                outputRGB[outputIndex] = (byte) outR;
-                outputRGB[outputIndex + 1] = (byte) outG;
-                outputRGB[outputIndex + 2] = (byte) outB;
+                gatheredChunk = new byte[WIDTH * currentChunkHeight * 3 * size];
+            }
+
+            // Broadcast the chunk to all processes
+            MPI.COMM_WORLD.Bcast(inputChunk, 0, inputChunk.length, MPI.BYTE, 0);
+
+            // Perform computation on the current chunk
+            for (int y = 0; y < currentChunkHeight; y++) {
+                for (int x = 0; x < WIDTH; x++) {
+                    float red = 0f, green = 0f, blue = 0f;
+                    for (int i = 0; i < ord[0]; i++) {
+                        for (int j = 0; j < ord[0]; j++) {
+                            int imageX = (x - ord[0] / 2 + j + WIDTH) % WIDTH;
+                            int imageY = (y - ord[0] / 2 + i + currentChunkHeight) % currentChunkHeight;
+
+                            int pixelIndex = (imageY * WIDTH + imageX) * 3;
+                            int R = inputChunk[pixelIndex] & 0xFF;
+                            int G = inputChunk[pixelIndex + 1] & 0xFF;
+                            int B = inputChunk[pixelIndex + 2] & 0xFF;
+
+                            red += (R * flattenedKernel[i * ord[0] + j]);
+                            green += (G * flattenedKernel[i * ord[0] + j]);
+                            blue += (B * flattenedKernel[i * ord[0] + j]);
+                        }
+                    }
+                    int outR = Math.min(Math.max((int) (red * fact[0] + bi[0]), 0), 255);
+                    int outG = Math.min(Math.max((int) (green * fact[0] + bi[0]), 0), 255);
+                    int outB = Math.min(Math.max((int) (blue * fact[0] + bi[0]), 0), 255);
+                    int outputIndex = (y * WIDTH + x) * 3;
+                    outputChunk[outputIndex] = (byte) outR;
+                    outputChunk[outputIndex + 1] = (byte) outG;
+                    outputChunk[outputIndex + 2] = (byte) outB;
+                }
+            }
+
+            // Gather the results back to the root process for the current chunk
+            MPI.COMM_WORLD.Gather(outputChunk, 0, outputChunk.length, MPI.BYTE, gatheredChunk, 0, outputChunk.length, MPI.BYTE, 0);
+
+            // Assemble the output image on the root process
+            if (rank == 0) {
+                for (int y = 0; y < currentChunkHeight; y++) {
+                    for (int x = 0; x < WIDTH; x++) {
+                        int outputIndex = (y * WIDTH + x) * 3;
+                        int rgb = ((gatheredChunk[outputIndex] & 0xFF) << 16) |
+                                ((gatheredChunk[outputIndex + 1] & 0xFF) << 8) |
+                                (gatheredChunk[outputIndex + 2] & 0xFF);
+                        output.setRGB(x, startRow + y, rgb);
+                    }
+                }
             }
         }
-        System.out.println("Process " + rank + " outputRGB Length>  " + outputRGB.length);
-
-        System.out.println("Process " + rank + ": Finished convolution.");
-
-        // Gather the results back to the root process
-        byte[] fullOutputRGB = new byte[WIDTH * HEIGHT * 3];
-
-        MPI.COMM_WORLD.Gatherv(outputRGB, 0, outputRGB.length, MPI.BYTE, fullOutputRGB, 0, sendCounts, displs, MPI.BYTE, 0);
 
         // Save the output image on the root process
         if (rank == 0) {
-            output = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
-            for (int y = 0; y < HEIGHT; y++) {
-                for (int x = 0; x < WIDTH; x++) {
-                    int outputIndex = (y * WIDTH + x) * 3;
-                    int rgb = ((fullOutputRGB[outputIndex] & 0xFF) << 16) |
-                            ((fullOutputRGB[outputIndex + 1] & 0xFF) << 8) |
-                            (fullOutputRGB[outputIndex + 2] & 0xFF);
-                    output.setRGB(x, y, rgb);
-                }
-            }
-
             String outputFilepath = "output.png";
             ImageIO.write(output, "png", new File(outputFilepath));
             System.out.println("Process " + rank + ": Output image saved as " + outputFilepath);
