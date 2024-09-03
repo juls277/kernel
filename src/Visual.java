@@ -67,7 +67,7 @@ public class Visual implements ActionListener {
         processingList = new JComboBox<>(processingOptions);
         processingList.setBounds(20, 150, 200, 30);
 
-        String[] imageOptions = {"Choose Image...", "450x300", "600x400", "1350x900", "1500x1000", "1920x1280", "2250x1500", "3000x2000", "4500x3000", "6000x4000", "7500x5000", "8250x5500","12000x8000"};
+        String[] imageOptions = {"Choose Image...", "450x300", "600x400", "1350x900", "1500x1000", "1920x1280", "2250x1500", "3000x2000", "4500x3000", "6000x4000", "7500x5000"};
         JComboBox<String> imageList = new JComboBox<>(imageOptions);
         imageList.setBounds(20, 100, 200, 30);
 
@@ -249,10 +249,6 @@ public class Visual implements ActionListener {
                 return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/6000x4000.jpg";
             case "7500x5000":
                 return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/7500x5000.jpg";
-            case "8250x5500":
-                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/8250x5500.jpg";
-            case "12000x8000":
-                return "C:/Users/jusju/Desktop/kernel-image-processing-main/kernel-image-processing-master/pictures/12000x8000.jpg";
             default:
                 return null;
         }
